@@ -150,47 +150,56 @@ class SpatialSelfAttention(nn.Module):
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):
+    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., accelerated=False):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
 
-        self.scale = dim_head ** -0.5
-        self.heads = heads
+        if accelerated:
+            self.to_out = nn.MultiheadAttention(inner_dim, heads, dropout, kdim=context_dim, vdim=context_dim, batch_first=True)
+            self.to_out.register_parameter('in_proj_bias', None)
+        else:
+            self.scale = dim_head ** -0.5
+            self.heads = heads
 
-        self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
-        self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
-        self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
+            self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
+            self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
+            self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, query_dim),
-            nn.Dropout(dropout)
-        )
+            self.to_out = nn.Sequential(
+                nn.Linear(inner_dim, query_dim),
+                nn.Dropout(dropout)
+            )
 
     def forward(self, x, context=None, mask=None):
-        h = self.heads
-
-        q = self.to_q(x)
         context = default(context, x)
-        k = self.to_k(context)
-        v = self.to_v(context)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
+        if hasattr(self, "scale"):
+            h = self.heads
 
-        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
+            q = self.to_q(x)
+            k = self.to_k(context)
+            v = self.to_v(context)
 
-        if exists(mask):
-            mask = rearrange(mask, 'b ... -> b (...)')
-            max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, 'b j -> (b h) () j', h=h)
-            sim.masked_fill_(~mask, max_neg_value)
+            q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
 
-        # attention, what we cannot get enough of
-        attn = sim.softmax(dim=-1)
+            sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
-        out = einsum('b i j, b j d -> b i d', attn, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
-        return self.to_out(out)
+            if exists(mask):
+                mask = rearrange(mask, 'b ... -> b (...)')
+                max_neg_value = -torch.finfo(sim.dtype).max
+                mask = repeat(mask, 'b j -> (b h) () j', h=h)
+                print(mask)
+                sim.masked_fill_(~mask, max_neg_value)
+
+            # attention, what we cannot get enough of
+            attn = sim.softmax(dim=-1)
+
+            out = einsum('b i j, b j d -> b i d', attn, v)
+            out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+            return self.to_out(out)
+        else:
+            return self.to_out(x, context, context, key_padding_mask=mask)[0]
 
 
 class BasicTransformerBlock(nn.Module):
