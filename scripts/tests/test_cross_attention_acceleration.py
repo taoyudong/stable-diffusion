@@ -12,7 +12,7 @@ class TestCrossAttentionAcceleration(unittest.TestCase):
 
         # Generate original and accelerated CrossAttention modules with the same random weights
         cross_attention_orig = CrossAttention(512)
-        cross_attention_acc = CrossAttention(512, accelerated=True)
+        cross_attention_acc = CrossAttention(512, use_native_mha=True)
         cross_attention_acc.to_out.in_proj_weight = nn.Parameter(torch.cat([
             cross_attention_orig.to_q.weight.detach().clone(),
             cross_attention_orig.to_k.weight.detach().clone(),
