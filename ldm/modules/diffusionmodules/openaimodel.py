@@ -438,6 +438,7 @@ class UNetModel(nn.Module):
     :param resblock_updown: use residual blocks for up/downsampling.
     :param use_new_attention_order: use a different attention pattern for potentially
                                     increased efficiency.
+    :param use_native_mha: use nn.MultiheadAttention for potentially increased efficiency
     """
 
     def __init__(
@@ -461,6 +462,7 @@ class UNetModel(nn.Module):
         use_scale_shift_norm=False,
         resblock_updown=False,
         use_new_attention_order=False,
+        use_native_mha=False,
         use_spatial_transformer=False,    # custom transformer support
         transformer_depth=1,              # custom transformer support
         context_dim=None,                 # custom transformer support
@@ -555,7 +557,7 @@ class UNetModel(nn.Module):
                             num_head_channels=dim_head,
                             use_new_attention_order=use_new_attention_order,
                         ) if not use_spatial_transformer else SpatialTransformer(
-                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim
+                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim, use_native_mha=use_native_mha
                         )
                     )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
@@ -610,7 +612,7 @@ class UNetModel(nn.Module):
                 num_head_channels=dim_head,
                 use_new_attention_order=use_new_attention_order,
             ) if not use_spatial_transformer else SpatialTransformer(
-                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim
+                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim, use_native_mha=use_native_mha
                         ),
             ResBlock(
                 ch,
@@ -656,7 +658,7 @@ class UNetModel(nn.Module):
                             num_head_channels=dim_head,
                             use_new_attention_order=use_new_attention_order,
                         ) if not use_spatial_transformer else SpatialTransformer(
-                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim
+                            ch, num_heads, dim_head, depth=transformer_depth, context_dim=context_dim, use_native_mha=use_native_mha
                         )
                     )
                 if level and i == num_res_blocks:
