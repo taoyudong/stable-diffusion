@@ -150,14 +150,14 @@ class SpatialSelfAttention(nn.Module):
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., accelerated=False):
+    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., use_native_mha=False):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
 
-        if accelerated:
-            self.to_out = nn.MultiheadAttention(inner_dim, heads, dropout, kdim=context_dim, vdim=context_dim, batch_first=True)
-            self.to_out.register_parameter('in_proj_bias', None)
+        if use_native_mha:
+            self.mha = nn.MultiheadAttention(inner_dim, heads, dropout, kdim=context_dim, vdim=context_dim, batch_first=True)
+            self.mha.register_parameter('in_proj_bias', None)
         else:
             self.scale = dim_head ** -0.5
             self.heads = heads
@@ -174,7 +174,9 @@ class CrossAttention(nn.Module):
     def forward(self, x, context=None, mask=None):
         context = default(context, x)
 
-        if hasattr(self, "scale"):
+        if hasattr(self, "mha"):
+            return self.mha(x, context, context, key_padding_mask=mask)[0]
+        else:
             h = self.heads
 
             q = self.to_q(x)
@@ -198,8 +200,6 @@ class CrossAttention(nn.Module):
             out = einsum('b i j, b j d -> b i d', attn, v)
             out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
             return self.to_out(out)
-        else:
-            return self.to_out(x, context, context, key_padding_mask=mask)[0]
 
 
 class BasicTransformerBlock(nn.Module):
