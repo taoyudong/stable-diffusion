@@ -89,7 +89,7 @@ class LinearAttention(nn.Module):
         b, c, h, w = x.shape
         qkv = self.to_qkv(x)
         q, k, v = rearrange(qkv, 'b (qkv heads c) h w -> qkv b heads c (h w)', heads = self.heads, qkv=3)
-        k = k.softmax(dim=-1)  
+        k = k.softmax(dim=-1)
         context = torch.einsum('bhdn,bhen->bhde', k, v)
         out = torch.einsum('bhde,bhdn->bhen', context, q)
         out = rearrange(out, 'b heads c (h w) -> b (heads c) h w', heads=self.heads, h=h, w=w)
@@ -157,7 +157,8 @@ class CrossAttention(nn.Module):
 
         if use_native_mha:
             self.mha = nn.MultiheadAttention(inner_dim, heads, dropout, kdim=context_dim, vdim=context_dim, batch_first=True)
-            self.mha.register_parameter('in_proj_bias', None)
+            # This is a workaround since the current native MHA requires in_proj_bias as input but get RuntimeError: expected scalar type Half but found Float
+            self.mha.register_parameter('in_proj_bias', nn.Parameter(torch.zeros_like(self.mha.in_proj_bias), requires_grad = False))
         else:
             self.scale = dim_head ** -0.5
             self.heads = heads

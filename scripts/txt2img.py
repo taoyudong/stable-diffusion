@@ -338,6 +338,7 @@ def main():
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
           f" \nEnjoy.")
+    print('Time elapsed to generate the samples: {}'.format(toc - tic))
 
 
 if __name__ == "__main__":
